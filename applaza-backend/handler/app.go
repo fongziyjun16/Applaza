@@ -5,18 +5,56 @@ import (
 	"applaza-backend/service"
 	"encoding/json"
 	"fmt"
+	"github.com/form3tech-oss/jwt-go"
+	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"net/http"
+	"strconv"
 )
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received one upload request")
-	decoder := json.NewDecoder(r.Body)
-	var app model.App
-	if err := decoder.Decode(&app); err != nil {
-		panic(err)
+	//decoder := json.NewDecoder(r.Body)
+	//var app model.App
+	//if err := decoder.Decode(&app); err != nil {
+	//	panic(err)
+	//}
+	//service.SaveApp(&app)
+	//fmt.Fprintf(w, "Upload request received: %s\n", app.Description)
+
+	fmt.Println("Received one upload request")
+
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
+
+	app := model.App{
+		Id:          uuid.New().String(),
+		User:        username.(string),
+		Title:       r.FormValue("title"),
+		Description: r.FormValue("description"),
 	}
-	service.SaveApp(&app)
-	fmt.Fprintf(w, "Upload request received: %s\n", app.Description)
+	price, err := strconv.Atoi(r.FormValue("price"))
+	fmt.Printf("%v,%T", price, price)
+	if err != nil {
+		fmt.Println(err)
+	}
+	app.Price = price
+
+	file, _, err := r.FormFile("media_file")
+	if err != nil {
+		http.Error(w, "Media file is not available", http.StatusBadRequest)
+		fmt.Printf("Media file is not available %v\n", err)
+	}
+
+	err = service.SaveApp(&app, file)
+	if err != nil {
+		http.Error(w, "Failed to save app to backend", http.StatusInternalServerError)
+		fmt.Printf("Failed to save app to vackend %v\n", err)
+	}
+
+	fmt.Println("App is saved successfully")
+	fmt.Fprintf(w, "App is saved successfully: %s\n", app.Description)
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -56,4 +94,20 @@ func checkoutHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(s.URL))
 
 	fmt.Println("Checkout process started!")
+}
+
+func deleteHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Received one request for delete")
+
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"].(string)
+	id := mux.Vars(r)["id"]
+
+	if err := service.DeleteApp(id, username); err != nil {
+		http.Error(w, "Failed to delete app from backend", http.StatusInternalServerError)
+		fmt.Printf("Failed to delete app from backend %v\n", err)
+		return
+	}
+	fmt.Println("App is deleted successfully")
 }

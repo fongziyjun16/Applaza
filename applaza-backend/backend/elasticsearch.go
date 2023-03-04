@@ -47,7 +47,30 @@ func InitElasticsearchBackend() {
 			panic(err)
 		}
 	}
-	fmt.Println("Index is created.")
+
+	exists, err = client.IndexExists(constants.USER_INDEX).Do(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	if !exists {
+		mapping := `{
+						"mappings": {
+							"properties": {
+								"username": {"type": "keyword"},
+								"password": {"type": "keyword"},
+								"age": {"type": "long", "index": false},
+								"gender": {"type": "keyword", "index": false}
+							}
+						}
+					}`
+		_, err := client.CreateIndex(constants.USER_INDEX).Body(mapping).Do(context.Background())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	fmt.Println("Indices is created.")
 
 	ESBackend = &ElasticsearchBackend{client: client}
 }
@@ -58,4 +81,14 @@ func (backend *ElasticsearchBackend) ReadFromES(query elastic.Query, index strin
 		return nil, err
 	}
 	return searchResult, nil
+}
+
+func (backend *ElasticsearchBackend) SaveToES(i interface{}, index string, id string) error {
+	_, err := backend.client.Index().Index(index).Id(id).BodyJson(i).Do(context.Background())
+	return err
+}
+
+func (backend *ElasticsearchBackend) DeleteFromES(query elastic.Query, index string) error {
+	_, err := backend.client.DeleteByQuery().Index(index).Query(query).Pretty(true).Do(context.Background())
+	return err
 }

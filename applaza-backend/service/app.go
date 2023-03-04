@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/olivere/elastic/v7"
 	"github.com/stripe/stripe-go/v74"
+	"mime/multipart"
 	"reflect"
 )
 
@@ -78,7 +79,7 @@ func getAppFromSearchResult(searchResult *elastic.SearchResult) []model.App {
 	return apps
 }
 
-func SaveApp(app *model.App) error {
+func SaveApp(app *model.App, file multipart.File) error {
 	productID, priceID, err := backend.CreateProductWithPrice(app.Title, app.Description, int64(app.Price*100))
 	if err != nil {
 		fmt.Printf("Failed to create Product and Price using Stripe SDK %v\n", err)
@@ -86,7 +87,19 @@ func SaveApp(app *model.App) error {
 	}
 	app.ProductID = productID
 	app.PriceID = priceID
-	fmt.Printf("Product %s with price %s is successfully created", productID, priceID)
+
+	medialink, err := backend.GCSBackend.SaveToGCS(file, app.Id)
+	if err != nil {
+		return err
+	}
+	app.Url = medialink
+	err = backend.ESBackend.SaveToES(app, constants.APP_INDEX, app.Id)
+	if err != nil {
+		fmt.Printf("Failed to save app to elasticsearch with app index %v\n", err)
+		return err
+	}
+
+	fmt.Println("Apop is saved successfully to ES app index.")
 	return nil
 }
 
@@ -106,4 +119,11 @@ func CheckoutApp(domain string, appID string) (*stripe.CheckoutSession, error) {
 	//}
 
 	return backend.CreateCheckoutSession(domain, app.PriceID)
+}
+
+func DeleteApp(id string, user string) error {
+	query := elastic.NewBoolQuery()
+	query.Must(elastic.NewTermQuery("id", id))
+	query.Must(elastic.NewTermQuery("user", user))
+	return backend.ESBackend.DeleteFromES(query, constants.APP_INDEX)
 }

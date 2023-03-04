@@ -9,4 +9,5 @@ package constants
 //	ES_USERNAME = "elastic"
 //	ES_PASSWORD = "elastic"
 //  STRIPE_API_KEY = "STRIPE_API_KEY"
+//  GCS_BUCKET = "GCS_BUCKET"
 //)
